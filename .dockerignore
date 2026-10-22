@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+**/dist
+**/.venv
+work
+outputs
+.git
+.env
+__pycache__
+**/__pycache__
+*.py[cod]

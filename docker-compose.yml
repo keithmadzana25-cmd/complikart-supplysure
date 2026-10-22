@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-complikart}
+      POSTGRES_USER: ${POSTGRES_USER:-complikart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_only}
+    ports:
+      - "127.0.0.1:5432:5432"
+    shm_size: 256mb
+    mem_limit: 1g
+    cpus: 2.0
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-complikart} -d ${POSTGRES_DB:-complikart}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    mem_limit: 256m
+    cpus: 0.5
+    command: ["redis-server", "--maxmemory", "192mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://complikart:local_dev_only@postgres:5432/complikart
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-complikart_local_demo_change_before_deployment_32chars}
+      NODE_OPTIONS: --max-old-space-size=512
+    init: true
+    mem_limit: 768m
+    cpus: 1.0
+    ports:
+      - "127.0.0.1:4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["node", "dist/index.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "127.0.0.1:5174:5173"
+    environment:
+      API_PROXY_TARGET: http://backend:4000
+    mem_limit: 384m
+    cpus: 0.5
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  ai-service:
+    profiles: ["ai"]
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    environment:
+      PORT: 4100
+      DATABASE_URL: postgres://complikart:local_dev_only@postgres:5432/complikart
+      AI_INGEST_TOKEN: ${AI_INGEST_TOKEN:-}
+      EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      LLM_ENDPOINT: ${LLM_ENDPOINT:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      HF_HOME: /models/huggingface
+      OMP_NUM_THREADS: 2
+    volumes:
+      - ai_model_cache:/models/huggingface
+    mem_limit: 4g
+    cpus: 2.0
+    ports:
+      - "127.0.0.1:4100:4100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4100"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  ai_model_cache:

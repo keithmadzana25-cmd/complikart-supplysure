@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+work/
+.pitchdeck-build/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python and editor/runtime artifacts
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# Keep the current deck; omit superseded or temporary presentation files.
+outputs/*.pptx
+!outputs/CompliKart_SupplySure_Expanded_Pitch_Deck.pptx
